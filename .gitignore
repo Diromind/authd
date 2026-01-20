@@ -1,0 +1,13 @@
+# Binaries
+bin/
+*.exe
+
+# Test artifacts
+*.test
+*.out
+
+# Vendor directory (remove if you commit dependencies)
+vendor/
+
+# Local env files (secrets)
+.env
