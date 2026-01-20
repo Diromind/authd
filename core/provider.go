@@ -7,8 +7,8 @@ import (
 
 var (
 	ErrProviderTokenExchange = errors.New("provider token exchange failed")
-	ErrProviderUserInfo = errors.New("provider user info request failed")
-	ErrProviderRefreshToken = errors.New("provider token refresh failed")
+	ErrProviderUserInfo      = errors.New("provider user info request failed")
+	ErrProviderRefreshToken  = errors.New("provider token refresh failed")
 )
 
 // OAuthTokens represents the tokens returned by an OAuth provider

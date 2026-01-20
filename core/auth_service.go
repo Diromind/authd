@@ -28,16 +28,28 @@ func NewAuthService(repo Repository, config *Config, providers map[Provider]Auth
 	}
 }
 
-func setProviderFields(user *User, provider Provider, providerUserID string, refreshToken string) error {
-	switch provider {
-	case ProviderGoogle:
-		user.GoogleID = &providerUserID
-		user.GoogleRefreshToken = &refreshToken
-	case ProviderYandex:
-		user.YandexID = &providerUserID
-		user.YandexRefreshToken = &refreshToken
-	default:
-		return ErrUnsupportedProvider
+func addOrUpdateProvider(user *User, provider Provider, providerUserID string, refreshToken string) {
+	// Check if provider already exists, update it
+	for i := range user.Providers {
+		if user.Providers[i].Provider == provider {
+			user.Providers[i].ProviderID = providerUserID
+			user.Providers[i].RefreshToken = refreshToken
+			return
+		}
+	}
+	// Provider doesn't exist, add new entry
+	user.Providers = append(user.Providers, ProviderAuthData{
+		Provider:     provider,
+		ProviderID:   providerUserID,
+		RefreshToken: refreshToken,
+	})
+}
+
+func getProviderData(user *User, provider Provider) *ProviderAuthData {
+	for i := range user.Providers {
+		if user.Providers[i].Provider == provider {
+			return &user.Providers[i]
+		}
 	}
 	return nil
 }
@@ -71,10 +83,13 @@ func (s *AuthService) Login(ctx context.Context, provider Provider, code string)
 				ID:        uuid.New(),
 				CreatedAt: now,
 				UpdatedAt: now,
-			}
-
-			if err := setProviderFields(user, provider, userInfo.ProviderUserID, oauthTokens.RefreshToken); err != nil {
-				return nil, err
+				Providers: []ProviderAuthData{
+					{
+						Provider:     provider,
+						ProviderID:   userInfo.ProviderUserID,
+						RefreshToken: oauthTokens.RefreshToken,
+					},
+				},
 			}
 
 			if err := s.repo.CreateUser(ctx, user); err != nil {
@@ -165,19 +180,15 @@ func (s *AuthService) GetUserInfo(ctx context.Context, userID uuid.UUID) (*UserI
 		return nil, fmt.Errorf("failed to find user: %w", err)
 	}
 
-	// 2. Determine which provider to use (prefer Google, fallback to Yandex)
-	var provider Provider
-	var oauthRefreshToken string
-
-	if user.GoogleRefreshToken != nil {
-		provider = ProviderGoogle
-		oauthRefreshToken = *user.GoogleRefreshToken
-	} else if user.YandexRefreshToken != nil {
-		provider = ProviderYandex
-		oauthRefreshToken = *user.YandexRefreshToken
-	} else {
+	// 2. Determine which provider to use (use first available provider)
+	if len(user.Providers) == 0 {
 		return nil, fmt.Errorf("user has no linked OAuth accounts")
 	}
+
+	// Use the first provider (in the future, could add logic to prefer certain providers)
+	providerData := user.Providers[0]
+	provider := providerData.Provider
+	oauthRefreshToken := providerData.RefreshToken
 
 	// 3. Get provider implementation
 	authProvider, ok := s.providers[provider]

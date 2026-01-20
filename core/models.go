@@ -15,15 +15,19 @@ const (
 	// Future providers can be added here
 )
 
+// ProviderAuthData represents authentication data for a single OAuth provider
+type ProviderAuthData struct {
+	Provider     Provider
+	ProviderID   string
+	RefreshToken string
+}
+
 // User represents an authenticated user with linked OAuth accounts
 type User struct {
-	ID                 uuid.UUID
-	CreatedAt          time.Time
-	UpdatedAt          time.Time
-	GoogleID           *string // Nullable - only if Google account linked
-	GoogleRefreshToken *string // OAuth refresh token from Google
-	YandexID           *string // Nullable - only if Yandex account linked
-	YandexRefreshToken *string // OAuth refresh token from Yandex
+	ID        uuid.UUID
+	CreatedAt time.Time
+	UpdatedAt time.Time
+	Providers []ProviderAuthData
 }
 
 // RefreshToken represents an authd session token

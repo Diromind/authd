@@ -2,13 +2,16 @@ CREATE TABLE `authd/users` (
     id Uuid,
     created_at Timestamp64,
     updated_at Timestamp64,
-    google_id Utf8,
-    google_refresh_token Utf8,
-    yandex_id Utf8,
-    yandex_refresh_token Utf8,
-    INDEX idx_google_id GLOBAL UNIQUE SYNC ON (google_id),
-    INDEX idx_yandex_id GLOBAL UNIQUE SYNC ON (yandex_id),
     PRIMARY KEY (id)
+);
+
+CREATE TABLE `authd/user_providers` (
+    user_id Uuid,
+    provider Utf8,
+    provider_id Utf8,
+    refresh_token Utf8,
+    INDEX idx_provider_lookup GLOBAL UNIQUE SYNC ON (provider, provider_id),
+    PRIMARY KEY (user_id, provider)
 );
 
 CREATE TABLE `authd/refresh_tokens` (
