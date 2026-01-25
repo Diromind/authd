@@ -1,18 +1,16 @@
 package core
 
 type Config struct {
-	// JWT configuration
-	JWTSecret            string // Secret key for signing JWT tokens
-	AccessTokenDuration  int    // Access token lifetime in seconds
-	RefreshTokenDuration int    // Refresh token lifetime in seconds
+	JWT    JWTConfig    `yaml:"jwt"`
+	Crypto CryptoConfig `yaml:"crypto"`
+}
 
-	// Google OAuth configuration
-	GoogleClientID     string
-	GoogleClientSecret string
-	GoogleRedirectURI  string // OAuth redirect URI for Google
+type JWTConfig struct {
+	Secret               string `yaml:"secret"`
+	AccessTokenDuration  int    `yaml:"access_token_duration"`
+	RefreshTokenDuration int    `yaml:"refresh_token_duration"`
+}
 
-	// Yandex OAuth configuration
-	YandexClientID     string
-	YandexClientSecret string
-	YandexRedirectURI  string // OAuth redirect URI for Yandex
+type CryptoConfig struct {
+	EncryptionKey string `yaml:"encryption_key"`
 }

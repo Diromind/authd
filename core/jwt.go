@@ -20,7 +20,7 @@ type Claims struct {
 
 func GenerateAccessToken(userID uuid.UUID, config *Config) (string, error) {
 	now := time.Now()
-	expiresAt := now.Add(time.Duration(config.AccessTokenDuration) * time.Second)
+	expiresAt := now.Add(time.Duration(config.JWT.AccessTokenDuration) * time.Second)
 
 	claims := &Claims{
 		UserID: userID,
@@ -31,7 +31,7 @@ func GenerateAccessToken(userID uuid.UUID, config *Config) (string, error) {
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	signedToken, err := token.SignedString([]byte(config.JWTSecret))
+	signedToken, err := token.SignedString([]byte(config.JWT.Secret))
 	if err != nil {
 		return "", err
 	}
@@ -44,7 +44,7 @@ func ValidateAccessToken(tokenString string, config *Config) (uuid.UUID, error) 
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, ErrInvalidToken
 		}
-		return []byte(config.JWTSecret), nil
+		return []byte(config.JWT.Secret), nil
 	})
 
 	if err != nil {

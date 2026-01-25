@@ -28,9 +28,9 @@ type Repository interface {
 
 	CreateRefreshToken(ctx context.Context, token *RefreshToken) error
 
-	FindRefreshToken(ctx context.Context, token string) (*RefreshToken, error)
+	FindRefreshTokenByID(ctx context.Context, tokenID string) (*RefreshToken, error)
 
-	DeleteRefreshToken(ctx context.Context, token string) error
+	DeleteRefreshTokenByID(ctx context.Context, tokenID string) error
 
 	DeleteAllUserRefreshTokens(ctx context.Context, userID uuid.UUID) error
 

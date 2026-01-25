@@ -1,0 +1,37 @@
+# authd configuration file
+
+# Server configuration
+port: "8080"
+
+# Database configuration
+db:
+  type: "sqlite"              # sqlite or mock
+  sqlite_path: "./authd.db"
+
+# JWT token configuration
+jwt:
+  secret: "your-jwt-secret-key-here-change-in-production"
+  access_token_duration: 1800      # 30 minutes in seconds
+  refresh_token_duration: 2592000  # 30 days in seconds
+
+# Encryption configuration
+crypto:
+  encryption_key: "12345678901234567890123456789012"  # Must be exactly 32 bytes
+
+# Google OAuth configuration
+google:
+  client_id: "your-google-client-id"
+  client_secret: "your-google-client-secret"
+  redirect_uri: "http://localhost:8080/auth/google/callback"
+  oauth_base_url: "https://oauth2.googleapis.com"
+  userinfo_base_url: "https://www.googleapis.com"
+
+# Yandex OAuth configuration
+yandex:
+  client_id: "your-yandex-client-id"
+  client_secret: "your-yandex-client-secret"
+  redirect_uri: "http://localhost:8080/auth/yandex/callback"
+  oauth_base_url: "https://oauth.yandex.ru"
+  userinfo_base_url: "https://login.yandex.ru"
+  avatar_base_url: "https://avatars.yandex.net/get-yapic"
+  avatar_size: "islands-200"

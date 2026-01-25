@@ -13,24 +13,23 @@ import (
 	"authd/core"
 )
 
-const (
-	GoogleOAuthBaseURL    = "https://oauth2.googleapis.com"
-	GoogleUserInfoBaseURL = "https://www.googleapis.com"
-)
-
-type GoogleProvider struct {
-	clientID     string
-	clientSecret string
-	redirectURI  string
-	httpClient   *http.Client
+type GoogleConfig struct {
+	ClientID        string `yaml:"client_id"`
+	ClientSecret    string `yaml:"client_secret"`
+	RedirectURI     string `yaml:"redirect_uri"`
+	OAuthBaseURL    string `yaml:"oauth_base_url"`
+	UserInfoBaseURL string `yaml:"userinfo_base_url"`
 }
 
-func NewGoogleProvider(config *core.Config) *GoogleProvider {
+type GoogleProvider struct {
+	config     *GoogleConfig
+	httpClient *http.Client
+}
+
+func NewGoogleProvider(config *GoogleConfig) *GoogleProvider {
 	return &GoogleProvider{
-		clientID:     config.GoogleClientID,
-		clientSecret: config.GoogleClientSecret,
-		redirectURI:  config.GoogleRedirectURI,
-		httpClient:   &http.Client{Timeout: 10 * time.Second},
+		config:     config,
+		httpClient: &http.Client{Timeout: 10 * time.Second},
 	}
 }
 
@@ -53,11 +52,11 @@ func (g *GoogleProvider) ExchangeCode(ctx context.Context, code string) (*core.O
 	data := url.Values{}
 	data.Set("grant_type", "authorization_code")
 	data.Set("code", code)
-	data.Set("client_id", g.clientID)
-	data.Set("client_secret", g.clientSecret)
-	data.Set("redirect_uri", g.redirectURI)
+	data.Set("client_id", g.config.ClientID)
+	data.Set("client_secret", g.config.ClientSecret)
+	data.Set("redirect_uri", g.config.RedirectURI)
 
-	tokenURL := GoogleOAuthBaseURL + "/token"
+	tokenURL := g.config.OAuthBaseURL + "/token"
 	req, err := http.NewRequestWithContext(
 		ctx,
 		"POST",
@@ -94,7 +93,7 @@ func (g *GoogleProvider) ExchangeCode(ctx context.Context, code string) (*core.O
 }
 
 func (g *GoogleProvider) GetUserInfo(ctx context.Context, accessToken string) (*core.UserInfo, error) {
-	userinfoURL := GoogleUserInfoBaseURL + "/oauth2/v2/userinfo"
+	userinfoURL := g.config.UserInfoBaseURL + "/oauth2/v2/userinfo"
 
 	req, err := http.NewRequestWithContext(ctx, "GET", userinfoURL, nil)
 	if err != nil {
@@ -131,10 +130,10 @@ func (g *GoogleProvider) RefreshAccessToken(ctx context.Context, refreshToken st
 	data := url.Values{}
 	data.Set("grant_type", "refresh_token")
 	data.Set("refresh_token", refreshToken)
-	data.Set("client_id", g.clientID)
-	data.Set("client_secret", g.clientSecret)
+	data.Set("client_id", g.config.ClientID)
+	data.Set("client_secret", g.config.ClientSecret)
 
-	tokenURL := GoogleOAuthBaseURL + "/token"
+	tokenURL := g.config.OAuthBaseURL + "/token"
 	req, err := http.NewRequestWithContext(
 		ctx,
 		"POST",

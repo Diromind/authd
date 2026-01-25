@@ -2,17 +2,31 @@ package storage
 
 import (
 	"context"
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/rand"
+	"encoding/base64"
+	"io"
 	"time"
 
 	"authd/core"
 	"authd/core/providers"
 
 	"github.com/google/uuid"
+	"golang.org/x/crypto/bcrypt"
 )
 
-// Predefined test users
+func testEncrypt(plaintext string) string {
+	key := []byte("12345678901234567890123456789012")
+	block, _ := aes.NewCipher(key)
+	gcm, _ := cipher.NewGCM(block)
+	nonce := make([]byte, gcm.NonceSize())
+	io.ReadFull(rand.Reader, nonce)
+	ciphertext := gcm.Seal(nonce, nonce, []byte(plaintext), nil)
+	return base64.StdEncoding.EncodeToString(ciphertext)
+}
+
 var (
-	// User1 - User with mock provider only
 	User1 = &core.User{
 		ID:        uuid.MustParse("11111111-1111-1111-1111-111111111111"),
 		CreatedAt: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
@@ -21,12 +35,11 @@ var (
 			{
 				Provider:     providers.ProviderMock,
 				ProviderID:   "mock_user_1",
-				RefreshToken: "mock_refresh_token_1",
+				RefreshToken: testEncrypt("mock_refresh_token_1"),
 			},
 		},
 	}
 
-	// User2 - User with multiple providers (Google and Yandex)
 	User2 = &core.User{
 		ID:        uuid.MustParse("22222222-2222-2222-2222-222222222222"),
 		CreatedAt: time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC),
@@ -35,17 +48,16 @@ var (
 			{
 				Provider:     core.ProviderGoogle,
 				ProviderID:   "mock_user_2",
-				RefreshToken: "mock_refresh_token_2",
+				RefreshToken: testEncrypt("mock_refresh_token_2"),
 			},
 			{
 				Provider:     core.ProviderYandex,
 				ProviderID:   "mock_user_2",
-				RefreshToken: "mock_refresh_token_2",
+				RefreshToken: testEncrypt("mock_refresh_token_2"),
 			},
 		},
 	}
 
-	// User3 - User with mock provider only (different from User1)
 	User3 = &core.User{
 		ID:        uuid.MustParse("33333333-3333-3333-3333-333333333333"),
 		CreatedAt: time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC),
@@ -54,50 +66,64 @@ var (
 			{
 				Provider:     providers.ProviderMock,
 				ProviderID:   "mock_user_3",
-				RefreshToken: "mock_refresh_token_1",
+				RefreshToken: testEncrypt("mock_refresh_token_1"),
 			},
 		},
 	}
 
-	// AllUsers is a slice of all predefined test users
 	AllUsers = []*core.User{User1, User2, User3}
 )
 
-// Predefined test refresh tokens
+const (
+	Token1Key = "test_key_1"
+	Token2Key = "test_key_2"
+	Token3Key = "test_key_3"
+	Token4Key = "test_key_4"
+)
+
 var (
-	// Token1 - Valid token for User1
+	token_hash_1, _ = bcrypt.GenerateFromPassword([]byte(Token1Key), 12)
+	token_hash_2, _ = bcrypt.GenerateFromPassword([]byte(Token2Key), 12)
+	token_hash_3, _ = bcrypt.GenerateFromPassword([]byte(Token3Key), 12)
+	token_hash_4, _ = bcrypt.GenerateFromPassword([]byte(Token4Key), 12)
+
 	Token1 = &core.RefreshToken{
-		Token:     "refresh_token_1",
-		UserID:    User1.ID,
-		CreatedAt: time.Now().Add(-24 * time.Hour),
-		ExpiresAt: time.Now().Add(30 * 24 * time.Hour), // Valid for 30 days
+		TokenID:      "token_id_1",
+		TokenKeyHash: string(token_hash_1),
+		UserID:       User1.ID,
+		CreatedAt:    time.Now().Add(-24 * time.Hour),
+		ExpiresAt:    time.Now().Add(30 * 24 * time.Hour),
 	}
 
-	// Token2 - Valid token for User2
 	Token2 = &core.RefreshToken{
-		Token:     "refresh_token_2",
-		UserID:    User2.ID,
-		CreatedAt: time.Now().Add(-24 * time.Hour),
-		ExpiresAt: time.Now().Add(30 * 24 * time.Hour), // Valid for 30 days
+		TokenID:      "token_id_2",
+		TokenKeyHash: string(token_hash_2),
+		UserID:       User2.ID,
+		CreatedAt:    time.Now().Add(-24 * time.Hour),
+		ExpiresAt:    time.Now().Add(30 * 24 * time.Hour),
 	}
 
-	// Token3 - Expired token for User3
 	Token3 = &core.RefreshToken{
-		Token:     "refresh_token_3_expired",
-		UserID:    User3.ID,
-		CreatedAt: time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC),
-		ExpiresAt: time.Date(2023, 1, 31, 23, 59, 59, 0, time.UTC), // Expired
+		TokenID:      "token_id_3_expired",
+		TokenKeyHash: string(token_hash_3),
+		UserID:       User3.ID,
+		CreatedAt:    time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC),
+		ExpiresAt:    time.Date(2023, 1, 31, 23, 59, 59, 0, time.UTC),
 	}
 
-	// Token4 - Another valid token for User1 (multi-device scenario)
 	Token4 = &core.RefreshToken{
-		Token:     "refresh_token_1_device2",
-		UserID:    User1.ID,
-		CreatedAt: time.Now().Add(-12 * time.Hour),
-		ExpiresAt: time.Now().Add(30 * 24 * time.Hour), // Valid for 30 days
+		TokenID:      "token_id_1_device2",
+		TokenKeyHash: string(token_hash_4),
+		UserID:       User1.ID,
+		CreatedAt:    time.Now().Add(-12 * time.Hour),
+		ExpiresAt:    time.Now().Add(30 * 24 * time.Hour),
 	}
 
-	// AllTokens is a slice of all predefined test refresh tokens
+	Token1Full = "ADRT_token_id_1." + Token1Key
+	Token2Full = "ADRT_token_id_2." + Token2Key
+	Token3Full = "ADRT_token_id_3_expired." + Token3Key
+	Token4Full = "ADRT_token_id_1_device2." + Token4Key
+
 	AllTokens = []*core.RefreshToken{Token1, Token2, Token3, Token4}
 )
 
@@ -133,9 +159,9 @@ func NewMockRepository() *MockRepository {
 		}
 	}
 
-	// Build refresh tokens map
+	// Build refresh tokens map (keyed by TokenID)
 	for _, token := range AllTokens {
-		repo.refreshTokens[token.Token] = token
+		repo.refreshTokens[token.TokenID] = token
 	}
 
 	return repo
@@ -194,16 +220,15 @@ func (m *MockRepository) UpdateProviderRefreshToken(ctx context.Context, userID 
 func (m *MockRepository) CreateRefreshToken(ctx context.Context, token *core.RefreshToken) error {
 	m.CreateRefreshTokenCalls++
 
-	// Check for duplicate token
-	if _, exists := m.refreshTokens[token.Token]; exists {
+	if _, exists := m.refreshTokens[token.TokenID]; exists {
 		return core.ErrAlreadyExists
 	}
 
 	return nil
 }
 
-func (m *MockRepository) FindRefreshToken(ctx context.Context, token string) (*core.RefreshToken, error) {
-	refreshToken, ok := m.refreshTokens[token]
+func (m *MockRepository) FindRefreshTokenByID(ctx context.Context, tokenID string) (*core.RefreshToken, error) {
+	refreshToken, ok := m.refreshTokens[tokenID]
 	if !ok {
 		return nil, core.ErrNotFound
 	}
@@ -211,8 +236,8 @@ func (m *MockRepository) FindRefreshToken(ctx context.Context, token string) (*c
 }
 
 // DeleteRefreshToken simulates deleting a refresh token (always succeeds if exists)
-func (m *MockRepository) DeleteRefreshToken(ctx context.Context, token string) error {
-	_, err := m.FindRefreshToken(ctx, token)
+func (m *MockRepository) DeleteRefreshTokenByID(ctx context.Context, tokenID string) error {
+	_, err := m.FindRefreshTokenByID(ctx, tokenID)
 	return err
 }
 

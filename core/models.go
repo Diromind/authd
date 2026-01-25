@@ -30,10 +30,11 @@ type User struct {
 	Providers []ProviderAuthData
 }
 
-// RefreshToken represents an authd session token
+// RefreshToken represents an authd session token with ID.Key format (ADRT_{ID}.{Key})
 type RefreshToken struct {
-	Token     string
-	UserID    uuid.UUID
-	CreatedAt time.Time
-	ExpiresAt time.Time
+	TokenID      string    // Plaintext ID for lookup (primary key)
+	TokenKeyHash string    // Bcrypt hash of Key for verification
+	UserID       uuid.UUID
+	CreatedAt    time.Time
+	ExpiresAt    time.Time
 }

@@ -1,0 +1,20 @@
+port: "8081"
+
+db:
+  type: "sqlite"
+  sqlite_path: "/tmp/authd-test.db"
+
+jwt:
+  secret: "test-secret-key-for-integration-tests"
+  access_token_duration: 1800
+  refresh_token_duration: 2592000
+
+crypto:
+  encryption_key: "12345678901234567890123456789012"
+
+google:
+  client_id: "mock_client_id"
+  client_secret: "mock_client_secret"
+  redirect_uri: "http://localhost:8081/callback"
+  oauth_base_url: "http://localhost:9999"
+  userinfo_base_url: "http://localhost:9999"

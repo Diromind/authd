@@ -15,10 +15,11 @@ CREATE TABLE `authd/user_providers` (
 );
 
 CREATE TABLE `authd/refresh_tokens` (
-    token Utf8,
+    token_id Utf8,
+    token_key_hash Utf8,
     user_id Uuid,
     created_at Timestamp64,
     expires_at Timestamp64,
     INDEX idx_user_id GLOBAL ON (user_id),
-    PRIMARY KEY (token)
+    PRIMARY KEY (token_id)
 );

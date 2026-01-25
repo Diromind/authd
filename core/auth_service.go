@@ -17,13 +17,15 @@ type LoginResponse struct {
 type AuthService struct {
 	repo      Repository
 	config    *Config
+	crypto    *CryptoService
 	providers map[Provider]AuthProvider
 }
 
-func NewAuthService(repo Repository, config *Config, providers map[Provider]AuthProvider) *AuthService {
+func NewAuthService(repo Repository, config *Config, providers map[Provider]AuthProvider, crypto *CryptoService) *AuthService {
 	return &AuthService{
 		repo:      repo,
 		config:    config,
+		crypto:    crypto,
 		providers: providers,
 	}
 }
@@ -73,7 +75,13 @@ func (s *AuthService) Login(ctx context.Context, provider Provider, code string)
 		return nil, fmt.Errorf("failed to get user info: %w", err)
 	}
 
-	// 4. Find or create user in our database
+	// 4. Encrypt OAuth provider refresh token
+	encryptedRefreshToken, err := s.crypto.EncryptToken(oauthTokens.RefreshToken)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encrypt refresh token: %w", err)
+	}
+
+	// 5. Find or create user in our database
 	user, err := s.repo.FindByProviderID(ctx, userInfo.ProviderUserID, provider)
 	if err != nil {
 		if err == ErrNotFound {
@@ -87,7 +95,7 @@ func (s *AuthService) Login(ctx context.Context, provider Provider, code string)
 					{
 						Provider:     provider,
 						ProviderID:   userInfo.ProviderUserID,
-						RefreshToken: oauthTokens.RefreshToken,
+						RefreshToken: encryptedRefreshToken,
 					},
 				},
 			}
@@ -100,24 +108,35 @@ func (s *AuthService) Login(ctx context.Context, provider Provider, code string)
 		}
 	} else {
 		// User exists - update OAuth refresh token (in case it changed)
-		if err := s.repo.UpdateProviderRefreshToken(ctx, user.ID, oauthTokens.RefreshToken, provider); err != nil {
+		if err := s.repo.UpdateProviderRefreshToken(ctx, user.ID, encryptedRefreshToken, provider); err != nil {
 			return nil, fmt.Errorf("failed to update refresh token: %w", err)
 		}
 	}
 
-	// 5. Generate authd's refresh token
+	// 6. Generate authd's refresh token
+	fullToken, tokenParts, err := GenerateRefreshToken()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate refresh token: %w", err)
+	}
+
+	keyHash, err := s.crypto.HashToken(tokenParts.Key)
+	if err != nil {
+		return nil, fmt.Errorf("failed to hash token key: %w", err)
+	}
+
 	refreshToken := &RefreshToken{
-		Token:     uuid.New().String(),
-		UserID:    user.ID,
-		CreatedAt: time.Now(),
-		ExpiresAt: time.Now().Add(time.Duration(s.config.RefreshTokenDuration) * time.Second),
+		TokenID:      tokenParts.ID,
+		TokenKeyHash: keyHash,
+		UserID:       user.ID,
+		CreatedAt:    time.Now(),
+		ExpiresAt:    time.Now().Add(time.Duration(s.config.JWT.RefreshTokenDuration) * time.Second),
 	}
 
 	if err := s.repo.CreateRefreshToken(ctx, refreshToken); err != nil {
 		return nil, fmt.Errorf("failed to create refresh token: %w", err)
 	}
 
-	// 6. Generate JWT access token
+	// 7. Generate JWT access token
 	accessToken, err := GenerateAccessToken(user.ID, s.config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate access token: %w", err)
@@ -125,14 +144,20 @@ func (s *AuthService) Login(ctx context.Context, provider Provider, code string)
 
 	return &LoginResponse{
 		AccessToken:  accessToken,
-		RefreshToken: refreshToken.Token,
+		RefreshToken: fullToken,
 		UserID:       user.ID,
 	}, nil
 }
 
 func (s *AuthService) Refresh(ctx context.Context, refreshTokenStr string) (string, error) {
-	// 1. Find refresh token in database
-	refreshToken, err := s.repo.FindRefreshToken(ctx, refreshTokenStr)
+	// 1. Parse token to extract ID and Key
+	tokenParts, err := ParseRefreshToken(refreshTokenStr)
+	if err != nil {
+		return "", ErrInvalidToken
+	}
+
+	// 2. Find refresh token in database by ID
+	refreshToken, err := s.repo.FindRefreshTokenByID(ctx, tokenParts.ID)
 	if err != nil {
 		if err == ErrNotFound {
 			return "", ErrInvalidToken
@@ -140,13 +165,18 @@ func (s *AuthService) Refresh(ctx context.Context, refreshTokenStr string) (stri
 		return "", fmt.Errorf("failed to find refresh token: %w", err)
 	}
 
-	// 2. Check if token is expired
+	// 3. Check if token is expired
 	if time.Now().After(refreshToken.ExpiresAt) {
-		_ = s.repo.DeleteRefreshToken(ctx, refreshTokenStr)
+		_ = s.repo.DeleteRefreshTokenByID(ctx, tokenParts.ID)
 		return "", ErrExpiredToken
 	}
 
-	// 3. Generate new access token
+	// 4. Verify token key hash
+	if !s.crypto.VerifyTokenHash(tokenParts.Key, refreshToken.TokenKeyHash) {
+		return "", ErrInvalidToken
+	}
+
+	// 5. Generate new access token
 	accessToken, err := GenerateAccessToken(refreshToken.UserID, s.config)
 	if err != nil {
 		return "", fmt.Errorf("failed to generate access token: %w", err)
@@ -156,9 +186,13 @@ func (s *AuthService) Refresh(ctx context.Context, refreshTokenStr string) (stri
 }
 
 func (s *AuthService) Logout(ctx context.Context, refreshTokenStr string) error {
-	if err := s.repo.DeleteRefreshToken(ctx, refreshTokenStr); err != nil {
+	tokenParts, err := ParseRefreshToken(refreshTokenStr)
+	if err != nil {
+		return ErrInvalidToken
+	}
+
+	if err := s.repo.DeleteRefreshTokenByID(ctx, tokenParts.ID); err != nil {
 		if err == ErrNotFound {
-			// Token already deleted or never existed - consider it a success
 			return nil
 		}
 		return fmt.Errorf("failed to delete refresh token: %w", err)
@@ -185,26 +219,35 @@ func (s *AuthService) GetUserInfo(ctx context.Context, userID uuid.UUID) (*UserI
 		return nil, fmt.Errorf("user has no linked OAuth accounts")
 	}
 
-	// Use the first provider (in the future, could add logic to prefer certain providers)
 	providerData := user.Providers[0]
 	provider := providerData.Provider
-	oauthRefreshToken := providerData.RefreshToken
+	encryptedOAuthToken := providerData.RefreshToken
 
-	// 3. Get provider implementation
+	// 3. Decrypt OAuth provider refresh token
+	oauthRefreshToken, err := s.crypto.DecryptToken(encryptedOAuthToken)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decrypt OAuth refresh token: %w", err)
+	}
+
+	// 4. Get provider implementation
 	authProvider, ok := s.providers[provider]
 	if !ok {
 		return nil, ErrUnsupportedProvider
 	}
 
-	// 4. Refresh OAuth access token
+	// 5. Refresh OAuth access token
 	oauthTokens, err := authProvider.RefreshAccessToken(ctx, oauthRefreshToken)
 	if err != nil {
 		return nil, fmt.Errorf("failed to refresh OAuth token: %w", err)
 	}
 
-	// 5. Update stored OAuth refresh token if provider returned a new one
+	// 6. Update stored OAuth refresh token if provider returned a new one
 	if oauthTokens.RefreshToken != "" && oauthTokens.RefreshToken != oauthRefreshToken {
-		_ = s.repo.UpdateProviderRefreshToken(ctx, userID, oauthTokens.RefreshToken, provider)
+		newEncrypted, err := s.crypto.EncryptToken(oauthTokens.RefreshToken)
+		if err != nil {
+			return nil, fmt.Errorf("failed to encrypt new refresh token: %w", err)
+		}
+		_ = s.repo.UpdateProviderRefreshToken(ctx, userID, newEncrypted, provider)
 	}
 
 	// 6. Fetch fresh user info from provider

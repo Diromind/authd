@@ -16,15 +16,21 @@ import (
 
 func setupTestServer() (*core.Server, *core.Config) {
 	config := &core.Config{
-		JWTSecret:            "test-secret-key-for-testing-purposes-only",
-		AccessTokenDuration:  1800,
-		RefreshTokenDuration: 2592000,
+		JWT: core.JWTConfig{
+			Secret:               "test-secret-key-for-testing-purposes-only",
+			AccessTokenDuration:  1800,
+			RefreshTokenDuration: 2592000,
+		},
+		Crypto: core.CryptoConfig{
+			EncryptionKey: "12345678901234567890123456789012",
+		},
 	}
 	repo := storage.NewMockRepository()
 	providerMap := map[core.Provider]core.AuthProvider{
 		providers.ProviderMock: providers.NewMockProvider(),
 	}
-	authService := core.NewAuthService(repo, config, providerMap)
+	crypto, _ := core.NewCryptoService(config.Crypto.EncryptionKey)
+	authService := core.NewAuthService(repo, config, providerMap, crypto)
 	return core.NewServer(authService, config), config
 }
 
@@ -153,7 +159,7 @@ func TestHandleRefresh_Success(t *testing.T) {
 	server, _ := setupTestServer()
 
 	reqBody := map[string]string{
-		"refresh_token": storage.Token1.Token,
+		"refresh_token": storage.Token1Full,
 	}
 	body, _ := json.Marshal(reqBody)
 
@@ -196,7 +202,7 @@ func TestHandleRefresh_ExpiredToken(t *testing.T) {
 	server, _ := setupTestServer()
 
 	reqBody := map[string]string{
-		"refresh_token": storage.Token3.Token,
+		"refresh_token": storage.Token3Full,
 	}
 	body, _ := json.Marshal(reqBody)
 
@@ -254,7 +260,7 @@ func TestHandleLogout_Success(t *testing.T) {
 	server, _ := setupTestServer()
 
 	reqBody := map[string]string{
-		"refresh_token": storage.Token1.Token,
+		"refresh_token": storage.Token1Full,
 	}
 	body, _ := json.Marshal(reqBody)
 
@@ -275,7 +281,7 @@ func TestHandleLogout_NonExistentToken(t *testing.T) {
 	server, _ := setupTestServer()
 
 	reqBody := map[string]string{
-		"refresh_token": "non_existent_token",
+		"refresh_token": "ADRT_non_existent_id.non_existent_key",
 	}
 	body, _ := json.Marshal(reqBody)
 

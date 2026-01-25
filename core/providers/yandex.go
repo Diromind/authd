@@ -13,26 +13,25 @@ import (
 	"authd/core"
 )
 
-const (
-	YandexOAuthBaseURL    = "https://oauth.yandex.ru"
-	YandexUserInfoBaseURL = "https://login.yandex.ru"
-	YandexAvatarBaseURL   = "https://avatars.yandex.net/get-yapic"
-	YandexAvatarSize      = "islands-200"
-)
-
-type YandexProvider struct {
-	clientID     string
-	clientSecret string
-	redirectURI  string
-	httpClient   *http.Client
+type YandexConfig struct {
+	ClientID        string `yaml:"client_id" json:"client_id"`
+	ClientSecret    string `yaml:"client_secret" json:"client_secret"`
+	RedirectURI     string `yaml:"redirect_uri" json:"redirect_uri"`
+	OAuthBaseURL    string `yaml:"oauth_base_url" json:"oauth_base_url"`
+	UserInfoBaseURL string `yaml:"userinfo_base_url" json:"userinfo_base_url"`
+	AvatarBaseURL   string `yaml:"avatar_base_url" json:"avatar_base_url"`
+	AvatarSize      string `yaml:"avatar_size" json:"avatar_size"`
 }
 
-func NewYandexProvider(config *core.Config) *YandexProvider {
+type YandexProvider struct {
+	config     *YandexConfig
+	httpClient *http.Client
+}
+
+func NewYandexProvider(config *YandexConfig) *YandexProvider {
 	return &YandexProvider{
-		clientID:     config.YandexClientID,
-		clientSecret: config.YandexClientSecret,
-		redirectURI:  config.YandexRedirectURI,
-		httpClient:   &http.Client{Timeout: 10 * time.Second},
+		config:     config,
+		httpClient: &http.Client{Timeout: 10 * time.Second},
 	}
 }
 
@@ -54,10 +53,10 @@ func (y *YandexProvider) ExchangeCode(ctx context.Context, code string) (*core.O
 	data := url.Values{}
 	data.Set("grant_type", "authorization_code")
 	data.Set("code", code)
-	data.Set("client_id", y.clientID)
-	data.Set("client_secret", y.clientSecret)
+	data.Set("client_id", y.config.ClientID)
+	data.Set("client_secret", y.config.ClientSecret)
 
-	tokenURL := YandexOAuthBaseURL + "/token"
+	tokenURL := y.config.OAuthBaseURL + "/token"
 	req, err := http.NewRequestWithContext(
 		ctx,
 		"POST",
@@ -94,7 +93,7 @@ func (y *YandexProvider) ExchangeCode(ctx context.Context, code string) (*core.O
 }
 
 func (y *YandexProvider) GetUserInfo(ctx context.Context, accessToken string) (*core.UserInfo, error) {
-	userinfoURL := YandexUserInfoBaseURL + "/info?format=json"
+	userinfoURL := y.config.UserInfoBaseURL + "/info?format=json"
 
 	req, err := http.NewRequestWithContext(ctx, "GET", userinfoURL, nil)
 	if err != nil {
@@ -121,7 +120,7 @@ func (y *YandexProvider) GetUserInfo(ctx context.Context, accessToken string) (*
 
 	pictureURL := ""
 	if userInfo.DefaultAvatarID != "" {
-		pictureURL = fmt.Sprintf("%s/%s/%s", YandexAvatarBaseURL, userInfo.DefaultAvatarID, YandexAvatarSize)
+		pictureURL = fmt.Sprintf("%s/%s/%s", y.config.AvatarBaseURL, userInfo.DefaultAvatarID, y.config.AvatarSize)
 	}
 
 	return &core.UserInfo{
@@ -136,10 +135,10 @@ func (y *YandexProvider) RefreshAccessToken(ctx context.Context, refreshToken st
 	data := url.Values{}
 	data.Set("grant_type", "refresh_token")
 	data.Set("refresh_token", refreshToken)
-	data.Set("client_id", y.clientID)
-	data.Set("client_secret", y.clientSecret)
+	data.Set("client_id", y.config.ClientID)
+	data.Set("client_secret", y.config.ClientSecret)
 
-	tokenURL := YandexOAuthBaseURL + "/token"
+	tokenURL := y.config.OAuthBaseURL + "/token"
 	req, err := http.NewRequestWithContext(
 		ctx,
 		"POST",
